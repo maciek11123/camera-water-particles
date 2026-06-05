@@ -4,191 +4,41 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gesture-Controlled 3D Earth</title>
-
-  <!-- CesiumJS -->
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Cesium.js"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
-
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      background: #000;
-      overflow: hidden;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      width: 100vw;
-      height: 100vh;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-
-    /* Cesium globe fullscreen */
-    #cesium-container {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-    }
-
-    /* Hide Cesium branding/timeline we don't need */
-    .cesium-widget-credits,
-    .cesium-viewer-bottom,
-    .cesium-viewer-toolbar,
-    .cesium-viewer-animationContainer,
-    .cesium-viewer-timelineContainer,
-    .cesium-viewer-fullscreenContainer {
-      display: none !important;
-    }
-
-    /* Hidden webcam */
+    body { background: #000; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; width: 100vw; height: 100vh; user-select: none; }
+    #cesium-container { position: fixed; inset: 0; z-index: 0; }
+    .cesium-widget-credits, .cesium-viewer-bottom, .cesium-viewer-toolbar,
+    .cesium-viewer-animationContainer, .cesium-viewer-timelineContainer,
+    .cesium-viewer-fullscreenContainer { display: none !important; }
     #webcam { display: none; }
-
-    /* ── Hand preview (bottom-right) ── */
-    #preview-wrapper {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 10;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 1px solid rgba(255,255,255,0.12);
-      box-shadow: 0 4px 28px rgba(0,0,0,0.6);
-      background: #000;
-    }
+    #preview-wrapper { position: fixed; bottom: 20px; right: 20px; z-index: 10; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 4px 28px rgba(0,0,0,0.6); background: #000; }
     #preview-canvas { display: block; width: 240px; height: 180px; }
-    #preview-label {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      text-align: center;
-      font-size: 9px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.3);
-      padding: 4px 0;
-      background: rgba(0,0,0,0.5);
-    }
-
-    /* ── Gesture panel (top-left) ── */
-    #ui-panel {
-      position: fixed;
-      top: 20px; left: 20px;
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    #gesture-display {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      background: rgba(0,0,0,0.58);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 12px;
-      padding: 10px 16px;
-      min-width: 190px;
-    }
-    #gesture-icon  { font-size: 22px; flex-shrink: 0; }
+    #preview-label { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.3); padding: 4px 0; background: rgba(0,0,0,0.5); }
+    #ui-panel { position: fixed; top: 20px; left: 20px; z-index: 10; display: flex; flex-direction: column; gap: 10px; }
+    #gesture-display { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.58); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 10px 16px; min-width: 190px; }
+    #gesture-icon { font-size: 22px; flex-shrink: 0; }
     #gesture-label { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.85); transition: color .25s; }
-
-    #controls-hint {
-      background: rgba(0,0,0,0.48);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 12px;
-      padding: 10px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-    }
+    #controls-hint { background: rgba(0,0,0,0.48); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 7px; }
     .hint-row { display: flex; align-items: center; gap: 8px; }
-    .hint-icon   { font-size: 15px; width: 22px; flex-shrink: 0; }
+    .hint-icon { font-size: 15px; width: 22px; flex-shrink: 0; }
     .hint-action { font-size: 12px; color: rgba(255,255,255,0.65); flex: 1; }
-    .hint-desc   { font-size: 11px; color: rgba(255,255,255,0.3); }
-
-    /* ── Status bar (bottom-left) ── */
-    #status-bar {
-      position: fixed;
-      bottom: 20px; left: 20px;
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(0,0,0,0.52);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 8px;
-      padding: 8px 12px;
-    }
-    #tracking-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.18);
-      flex-shrink: 0;
-      transition: background .2s, box-shadow .2s;
-    }
-    #tracking-dot.active {
-      background: #4CAF50;
-      box-shadow: 0 0 8px rgba(76,175,80,0.65);
-    }
+    .hint-desc { font-size: 11px; color: rgba(255,255,255,0.3); }
+    #status-bar { position: fixed; bottom: 20px; left: 20px; z-index: 10; display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.52); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 12px; }
+    #tracking-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.18); flex-shrink: 0; transition: background .2s, box-shadow .2s; }
+    #tracking-dot.active { background: #4CAF50; box-shadow: 0 0 8px rgba(76,175,80,0.65); }
     #status-text { font-size: 12px; color: rgba(255,255,255,0.48); }
-
-    /* ── Error overlay ── */
-    #error-overlay {
-      position: fixed; inset: 0;
-      z-index: 200;
-      background: rgba(0,0,0,0.92);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
+    #error-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; padding: 24px; }
     #error-overlay.hidden { display: none; }
-    .error-card {
-      background: rgba(12,12,22,0.98);
-      border: 1px solid rgba(255,80,80,0.22);
-      border-radius: 16px;
-      padding: 40px;
-      text-align: center;
-      max-width: 420px; width: 100%;
-    }
+    .error-card { background: rgba(12,12,22,0.98); border: 1px solid rgba(255,80,80,0.22); border-radius: 16px; padding: 40px; text-align: center; max-width: 420px; width: 100%; }
     .error-icon { font-size: 36px; color: rgba(255,100,100,0.8); margin-bottom: 16px; }
     .error-card h2 { color: rgba(255,255,255,0.9); font-size: 20px; font-weight: 500; margin-bottom: 10px; }
-    .error-card p  { color: rgba(255,255,255,0.52); font-size: 14px; line-height: 1.65; margin-bottom: 24px; }
-    .error-card button {
-      background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 8px;
-      color: rgba(255,255,255,0.78);
-      font-size: 14px;
-      padding: 10px 24px;
-      cursor: pointer;
-      font-family: inherit;
-    }
-    .error-card button:hover { background: rgba(255,255,255,0.16); }
-
-    /* ── Loading overlay ── */
-    #loading-overlay {
-      position: fixed; inset: 0;
-      z-index: 150;
-      background: #050810;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 24px;
-      transition: opacity .5s;
-    }
-    .loader-ring {
-      width: 44px; height: 44px;
-      border: 2px solid rgba(255,255,255,0.07);
-      border-top-color: rgba(100,165,255,0.85);
-      border-radius: 50%;
-      animation: spin .85s linear infinite;
-    }
+    .error-card p { color: rgba(255,255,255,0.52); font-size: 14px; line-height: 1.65; margin-bottom: 24px; }
+    .error-card button { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; color: rgba(255,255,255,0.78); font-size: 14px; padding: 10px 24px; cursor: pointer; font-family: inherit; }
+    #loading-overlay { position: fixed; inset: 0; z-index: 150; background: #050810; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; transition: opacity .5s; }
+    .loader-ring { width: 44px; height: 44px; border: 2px solid rgba(255,255,255,0.07); border-top-color: rgba(100,165,255,0.85); border-radius: 50%; animation: spin .85s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     #loading-text { color: rgba(255,255,255,0.42); font-size: 13px; letter-spacing: .03em; }
   </style>
@@ -198,44 +48,28 @@
   <div id="cesium-container"></div>
   <video id="webcam" autoplay muted playsinline></video>
 
-  <!-- Hand tracking preview -->
   <div id="preview-wrapper">
     <canvas id="preview-canvas"></canvas>
     <div id="preview-label">Hand Tracking</div>
   </div>
 
-  <!-- Gesture panel -->
   <div id="ui-panel">
     <div id="gesture-display">
       <span id="gesture-icon">—</span>
       <span id="gesture-label">No gesture</span>
     </div>
     <div id="controls-hint">
-      <div class="hint-row">
-        <span class="hint-icon">✋</span>
-        <span class="hint-action">Open palm</span>
-        <span class="hint-desc">Pan / rotate globe</span>
-      </div>
-      <div class="hint-row">
-        <span class="hint-icon">🤏</span>
-        <span class="hint-action">Pinch + move up/down</span>
-        <span class="hint-desc">Zoom</span>
-      </div>
-      <div class="hint-row">
-        <span class="hint-icon">☝️</span>
-        <span class="hint-action">Point finger</span>
-        <span class="hint-desc">Tilt view</span>
-      </div>
+      <div class="hint-row"><span class="hint-icon">✋</span><span class="hint-action">Open palm</span><span class="hint-desc">Pan globe</span></div>
+      <div class="hint-row"><span class="hint-icon">🤏</span><span class="hint-action">Pinch + move up/down</span><span class="hint-desc">Zoom</span></div>
+      <div class="hint-row"><span class="hint-icon">☝️</span><span class="hint-action">Point finger</span><span class="hint-desc">Tilt view</span></div>
     </div>
   </div>
 
-  <!-- Status bar -->
   <div id="status-bar">
     <div id="tracking-dot"></div>
     <span id="status-text">Initializing…</span>
   </div>
 
-  <!-- Error overlay -->
   <div id="error-overlay" class="hidden">
     <div class="error-card">
       <div class="error-icon">⚠</div>
@@ -245,7 +79,6 @@
     </div>
   </div>
 
-  <!-- Loading overlay -->
   <div id="loading-overlay">
     <div class="loader-ring"></div>
     <p id="loading-text">Starting…</p>
@@ -255,65 +88,41 @@
     import { HandLandmarker, FilesetResolver } from
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.js';
 
-    // ─── Config ───────────────────────────────────────────────────────────────
-
-    // Your Google Maps API key (for Google Photorealistic 3D Tiles)
     const GOOGLE_API_KEY = 'AIzaSyBH3aFQ3OB06FD3klVTBYnYl9ufiPD9NDo';
 
-    // No Cesium Ion token needed when using Google tiles directly
-    Cesium.Ion.defaultAccessToken = '';
+    // Public Cesium Ion token (needed to init viewer, even without Ion assets)
+    Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc5YzciLCJpZCI6NTc3MzMsImlhdCI6MTYyNzg0NTE4Mn0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
 
     const CFG = {
-      // Starting view — Earth from space
-      startLat:    20,
-      startLng:    10,
-      startHeight: 20000000,   // 20,000 km — full globe view
-      startHeading: 0,
-      startPitch:  -90,        // looking straight down at globe
-
-      // Gesture thresholds
+      startLat: 20, startLng: 10,
+      startHeight: 20000000,
+      startPitch: -90,
       pinchThreshold: 0.07,
-      fistThreshold:  0.17,
-      palmThreshold:  0.25,
-      pointThreshold: 0.18,    // index extended, others folded
+      fistThreshold: 0.17,
+      palmThreshold: 0.25,
+      pointThreshold: 0.18,
       gestureDebounce: 5,
-
-      // Sensitivity
-      panSensitivity:  1.0,
+      panSensitivity: 1.0,
       zoomSensitivity: 5.0,
       tiltSensitivity: 1.8,
-
       smoothing: 0.10,
-
-      // Limits
-      minHeight:  200,         // 200 m — street level
-      maxHeight:  25000000,    // 25,000 km — beyond Moon
-
-      previewW: 240,
-      previewH: 180,
+      minHeight: 200,
+      maxHeight: 25000000,
+      previewW: 240, previewH: 180,
     };
-
-    // ─── Gesture IDs ──────────────────────────────────────────────────────────
 
     const G = { IDLE: 'IDLE', PAN: 'PAN', ZOOM: 'ZOOM', TILT: 'TILT' };
-
     const META = {
-      [G.IDLE]: { icon: '—',  label: 'No gesture',        color: '#888' },
-      [G.PAN]:  { icon: '✋', label: 'Panning globe',      color: '#4CAF50' },
-      [G.ZOOM]: { icon: '🤏', label: 'Zooming',            color: '#2196F3' },
-      [G.TILT]: { icon: '☝️', label: 'Tilting view',       color: '#FF9800' },
+      [G.IDLE]: { icon: '—',  label: 'No gesture',    color: '#888' },
+      [G.PAN]:  { icon: '✋', label: 'Panning globe',  color: '#4CAF50' },
+      [G.ZOOM]: { icon: '🤏', label: 'Zooming',        color: '#2196F3' },
+      [G.TILT]: { icon: '☝️', label: 'Tilting view',   color: '#FF9800' },
     };
-
     const CONNECTIONS = [
-      [0,1],[1,2],[2,3],[3,4],
-      [0,5],[5,6],[6,7],[7,8],
-      [0,9],[9,10],[10,11],[11,12],
-      [0,13],[13,14],[14,15],[15,16],
-      [0,17],[17,18],[18,19],[19,20],
-      [5,9],[9,13],[13,17],
+      [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+      [0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],
+      [0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17],
     ];
-
-    // ─── DOM ──────────────────────────────────────────────────────────────────
 
     const webcamEl    = document.getElementById('webcam');
     const previewCv   = document.getElementById('preview-canvas');
@@ -326,242 +135,143 @@
     const loadingTxt  = document.getElementById('loading-text');
     const errorEl     = document.getElementById('error-overlay');
 
-    // ─── Cesium viewer ────────────────────────────────────────────────────────
-
     let viewer;
+    let deltaLng = 0, deltaLat = 0, zoomFactor = 1, deltaPitch = 0;
+    let activeGesture = G.IDLE, pendingGesture = G.IDLE, pendingFrames = 0, prevLm = null;
 
-    function initCesium() {
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const dist2D = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    async function initCesium() {
       viewer = new Cesium.Viewer('cesium-container', {
-        imageryProvider: false,
-        baseLayerPicker: false,
-        geocoder: false,
-        homeButton: false,
-        sceneModePicker: false,
-        navigationHelpButton: false,
-        animation: false,
-        timeline: false,
-        fullscreenButton: false,
-        vrButton: false,
-        infoBox: false,
-        selectionIndicator: false,
-        skyBox: new Cesium.SkyBox({
-          sources: {
-            positiveX: 'https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_px.jpg',
-            negativeX: 'https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_mx.jpg',
-            positiveY: 'https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_py.jpg',
-            negativeY: 'https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_my.jpg',
-            positiveZ: 'https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_pz.jpg',
-            negativeZ: 'https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_mz.jpg',
-          }
+        baseLayerPicker: false, geocoder: false, homeButton: false,
+        sceneModePicker: false, navigationHelpButton: false,
+        animation: false, timeline: false, fullscreenButton: false,
+        vrButton: false, infoBox: false, selectionIndicator: false,
+        imageryProvider: new Cesium.TileMapServiceImageryProvider({
+          url: Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII'),
+          fileExtension: 'jpg',
         }),
       });
 
-      // Google Photorealistic 3D Tiles
+      // Load Google Photorealistic 3D Tiles
       try {
         const tileset = await Cesium.Cesium3DTileset.fromUrl(
           `https://tile.googleapis.com/v1/3dtiles/root.json?key=${GOOGLE_API_KEY}`
         );
         viewer.scene.primitives.add(tileset);
+        viewer.imageryLayers.removeAll();
       } catch (e) {
-        console.warn('Google 3D tiles failed, falling back to Bing imagery:', e);
-        viewer.imageryLayers.addImageryProvider(
-          new Cesium.IonImageryProvider({ assetId: 2 })
-        );
+        console.warn('Google 3D tiles unavailable, using Natural Earth fallback:', e);
       }
 
-      // Start with full Earth view
       viewer.camera.setView({
         destination: Cesium.Cartesian3.fromDegrees(CFG.startLng, CFG.startLat, CFG.startHeight),
         orientation: { heading: 0, pitch: Cesium.Math.toRadians(CFG.startPitch), roll: 0 },
       });
 
-      // Disable default mouse/touch controls (we drive it with gestures)
-      viewer.scene.screenSpaceCameraController.enableRotate    = false;
-      viewer.scene.screenSpaceCameraController.enableTranslate = false;
-      viewer.scene.screenSpaceCameraController.enableZoom      = false;
-      viewer.scene.screenSpaceCameraController.enableTilt      = false;
-      viewer.scene.screenSpaceCameraController.enableLook      = false;
-    }
-
-    // ─── Camera target state ──────────────────────────────────────────────────
-
-    // We track desired changes as deltas applied each frame
-    let deltaLng      = 0;
-    let deltaLat      = 0;
-    let zoomFactor    = 1;   // multiplier applied to height each frame
-    let deltaPitch    = 0;
-
-    // ─── Gesture state ────────────────────────────────────────────────────────
-
-    let activeGesture  = G.IDLE;
-    let pendingGesture = G.IDLE;
-    let pendingFrames  = 0;
-    let prevLm         = null;
-
-    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-
-    function dist2D(a, b) {
-      return Math.hypot(a.x - b.x, a.y - b.y);
+      const ctrl = viewer.scene.screenSpaceCameraController;
+      ctrl.enableRotate = ctrl.enableTranslate = ctrl.enableZoom =
+      ctrl.enableTilt   = ctrl.enableLook      = false;
     }
 
     function classify(lm) {
-      // Pinch: thumb tip ↔ index tip close
       if (dist2D(lm[4], lm[8]) < CFG.pinchThreshold) return G.ZOOM;
-
-      const wrist   = lm[0];
-      const avgDist = (dist2D(wrist, lm[8]) + dist2D(wrist, lm[12]) +
-                       dist2D(wrist, lm[16]) + dist2D(wrist, lm[20])) / 4;
-
-      // Point finger (index up, others down)
-      const indexUp  = dist2D(wrist, lm[8])  > CFG.pointThreshold;
-      const middleDn = dist2D(wrist, lm[12]) < CFG.fistThreshold;
-      const ringDn   = dist2D(wrist, lm[16]) < CFG.fistThreshold;
+      const w = lm[0];
+      const avgDist = (dist2D(w, lm[8]) + dist2D(w, lm[12]) + dist2D(w, lm[16]) + dist2D(w, lm[20])) / 4;
+      const indexUp  = dist2D(w, lm[8])  > CFG.pointThreshold;
+      const middleDn = dist2D(w, lm[12]) < CFG.fistThreshold;
+      const ringDn   = dist2D(w, lm[16]) < CFG.fistThreshold;
       if (indexUp && middleDn && ringDn) return G.TILT;
-
-      // Open palm
       if (avgDist > CFG.palmThreshold) return G.PAN;
-
       return G.IDLE;
     }
 
     function applyGesture(gesture, lm) {
       if (!prevLm) { prevLm = lm; return; }
       const p = prevLm;
-
       switch (gesture) {
         case G.PAN: {
-          const dx = lm[9].x - p[9].x;
-          const dy = lm[9].y - p[9].y;
-          // Get current height to scale speed
-          const cam    = viewer.camera;
-          const carto  = Cesium.Ellipsoid.WGS84.cartesianToCartographic(cam.position);
-          const height = carto.height;
-          const scale  = (height / 6371000) * 80 * CFG.panSensitivity;
+          const dx = lm[9].x - p[9].x, dy = lm[9].y - p[9].y;
+          const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(viewer.camera.position);
+          const scale = (carto.height / 6371000) * 80 * CFG.panSensitivity;
           deltaLng -= dx * scale;
           deltaLat += dy * scale * 0.6;
           break;
         }
         case G.ZOOM: {
-          const midY     = (lm[4].y + lm[8].y) / 2;
-          const prevMidY = (p[4].y  + p[8].y)  / 2;
-          const dy = midY - prevMidY;
-          // Hand up = zoom in (dy < 0 → factor < 1)
+          const dy = ((lm[4].y + lm[8].y) - (p[4].y + p[8].y)) / 2;
           zoomFactor = Math.exp(dy * CFG.zoomSensitivity);
           break;
         }
         case G.TILT: {
-          const dy = lm[8].y - p[8].y;
-          deltaPitch += dy * CFG.tiltSensitivity;
+          deltaPitch += (lm[8].y - p[8].y) * CFG.tiltSensitivity;
           break;
         }
       }
-
       prevLm = lm;
     }
 
-    // ─── Apply deltas to Cesium camera each frame ─────────────────────────────
-
     function updateCamera() {
       if (!viewer) return;
-
       const cam   = viewer.camera;
       const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(cam.position);
 
-      // Pan
       if (Math.abs(deltaLng) > 0.0001 || Math.abs(deltaLat) > 0.0001) {
         carto.longitude += Cesium.Math.toRadians(deltaLng * CFG.smoothing);
         carto.latitude   = Cesium.Math.clamp(
           carto.latitude + Cesium.Math.toRadians(deltaLat * CFG.smoothing),
-          Cesium.Math.toRadians(-85),
-          Cesium.Math.toRadians(85)
+          Cesium.Math.toRadians(-85), Cesium.Math.toRadians(85)
         );
         deltaLng *= (1 - CFG.smoothing);
         deltaLat *= (1 - CFG.smoothing);
       }
 
-      // Zoom
       if (Math.abs(zoomFactor - 1) > 0.0001) {
-        const lerpedFactor = 1 + (zoomFactor - 1) * CFG.smoothing;
-        carto.height = clamp(carto.height * lerpedFactor, CFG.minHeight, CFG.maxHeight);
+        carto.height = clamp(carto.height * (1 + (zoomFactor - 1) * CFG.smoothing), CFG.minHeight, CFG.maxHeight);
         zoomFactor   = 1 + (zoomFactor - 1) * (1 - CFG.smoothing);
       }
 
-      // Tilt
-      if (Math.abs(deltaPitch) > 0.001) {
-        const currentPitch = cam.pitch;
-        const newPitch = Cesium.Math.clamp(
-          currentPitch + Cesium.Math.toRadians(deltaPitch * CFG.smoothing),
-          Cesium.Math.toRadians(-90),
-          Cesium.Math.toRadians(-5)
-        );
-        deltaPitch *= (1 - CFG.smoothing);
-        cam.setView({
-          destination: Cesium.Ellipsoid.WGS84.cartographicToCartesian(carto),
-          orientation: { heading: cam.heading, pitch: newPitch, roll: 0 },
-        });
-        return;
-      }
+      const newPitch = Math.abs(deltaPitch) > 0.001
+        ? Cesium.Math.clamp(
+            cam.pitch + Cesium.Math.toRadians(deltaPitch * CFG.smoothing),
+            Cesium.Math.toRadians(-90), Cesium.Math.toRadians(-5))
+        : cam.pitch;
+      if (Math.abs(deltaPitch) > 0.001) deltaPitch *= (1 - CFG.smoothing);
 
       cam.setView({
         destination: Cesium.Ellipsoid.WGS84.cartographicToCartesian(carto),
-        orientation: { heading: cam.heading, pitch: cam.pitch, roll: 0 },
+        orientation: { heading: cam.heading, pitch: newPitch, roll: 0 },
       });
     }
-
-    // ─── Skeleton preview ─────────────────────────────────────────────────────
 
     function drawPreview(lm, gesture) {
       const w = previewCv.width, h = previewCv.height;
       pCtx.clearRect(0, 0, w, h);
-
       if (webcamEl.readyState >= 2) {
-        pCtx.save();
-        pCtx.translate(w, 0); pCtx.scale(-1, 1);
-        pCtx.drawImage(webcamEl, 0, 0, w, h);
-        pCtx.restore();
-        pCtx.fillStyle = 'rgba(0,0,0,0.28)';
-        pCtx.fillRect(0, 0, w, h);
+        pCtx.save(); pCtx.translate(w, 0); pCtx.scale(-1, 1);
+        pCtx.drawImage(webcamEl, 0, 0, w, h); pCtx.restore();
+        pCtx.fillStyle = 'rgba(0,0,0,0.28)'; pCtx.fillRect(0, 0, w, h);
       }
-
       if (!lm) return;
-
-      const meta  = META[gesture] || META[G.IDLE];
-      const color = meta.color;
-      const px = l => (1 - l.x) * w;
-      const py = l => l.y * h;
-
-      pCtx.strokeStyle = color;
-      pCtx.lineWidth   = 2;
-      pCtx.globalAlpha = 0.82;
+      const { color, label } = META[gesture] || META[G.IDLE];
+      const px = l => (1 - l.x) * w, py = l => l.y * h;
+      pCtx.strokeStyle = color; pCtx.lineWidth = 2; pCtx.globalAlpha = 0.82;
       for (const [a, b] of CONNECTIONS) {
-        pCtx.beginPath();
-        pCtx.moveTo(px(lm[a]), py(lm[a]));
-        pCtx.lineTo(px(lm[b]), py(lm[b]));
-        pCtx.stroke();
+        pCtx.beginPath(); pCtx.moveTo(px(lm[a]), py(lm[a])); pCtx.lineTo(px(lm[b]), py(lm[b])); pCtx.stroke();
       }
-
       pCtx.globalAlpha = 1;
       for (let i = 0; i < lm.length; i++) {
-        pCtx.beginPath();
-        pCtx.arc(px(lm[i]), py(lm[i]), i === 0 ? 5 : 3.5, 0, Math.PI * 2);
-        pCtx.fillStyle = i === 0 ? '#fff' : color;
-        pCtx.fill();
+        pCtx.beginPath(); pCtx.arc(px(lm[i]), py(lm[i]), i === 0 ? 5 : 3.5, 0, Math.PI * 2);
+        pCtx.fillStyle = i === 0 ? '#fff' : color; pCtx.fill();
       }
-
-      pCtx.fillStyle = 'rgba(0,0,0,0.55)';
-      pCtx.fillRect(4, 4, 145, 22);
-      pCtx.fillStyle = color;
-      pCtx.font = 'bold 11px system-ui';
-      pCtx.fillText(meta.label, 8, 18);
+      pCtx.fillStyle = 'rgba(0,0,0,0.55)'; pCtx.fillRect(4, 4, 145, 22);
+      pCtx.fillStyle = color; pCtx.font = 'bold 11px system-ui'; pCtx.fillText(label, 8, 18);
     }
 
-    // ─── UI ───────────────────────────────────────────────────────────────────
-
     function updateUI(gesture, hasHand) {
-      const meta = META[gesture] || META[G.IDLE];
-      gestureIcon.textContent  = meta.icon;
-      gestureLbl.textContent   = meta.label;
-      gestureLbl.style.color   = meta.color;
+      const m = META[gesture] || META[G.IDLE];
+      gestureIcon.textContent = m.icon; gestureLbl.textContent = m.label; gestureLbl.style.color = m.color;
       trackDot.classList.toggle('active', hasHand);
     }
 
@@ -577,54 +287,37 @@
       document.getElementById('error-message').textContent = msg;
     }
 
-    // ─── Detection loop ───────────────────────────────────────────────────────
-
     let handLandmarker = null;
 
     function detectionLoop(ts) {
       requestAnimationFrame(detectionLoop);
-
       if (!handLandmarker || webcamEl.readyState < 2) return;
-
       const results = handLandmarker.detectForVideo(webcamEl, ts);
       const hasHand = results.landmarks && results.landmarks.length > 0;
-
       if (hasHand) {
-        const lm       = results.landmarks[0];
+        const lm = results.landmarks[0];
         const detected = classify(lm);
-
         if (detected === pendingGesture) pendingFrames++;
         else { pendingGesture = detected; pendingFrames = 0; }
-
         if (pendingFrames >= CFG.gestureDebounce && detected !== activeGesture) {
-          prevLm        = null;
-          activeGesture = detected;
+          prevLm = null; activeGesture = detected;
         }
-
         applyGesture(activeGesture, lm);
         drawPreview(lm, activeGesture);
       } else {
-        activeGesture = pendingGesture = G.IDLE;
-        pendingFrames = 0;
-        prevLm = null;
+        activeGesture = pendingGesture = G.IDLE; pendingFrames = 0; prevLm = null;
         drawPreview(null, G.IDLE);
       }
-
       updateUI(activeGesture, hasHand);
       updateCamera();
     }
 
-    // ─── Init ─────────────────────────────────────────────────────────────────
-
     async function init() {
-      previewCv.width  = CFG.previewW;
-      previewCv.height = CFG.previewH;
+      previewCv.width = CFG.previewW; previewCv.height = CFG.previewH;
 
-      // 1. Cesium globe
       setStatus('Loading 3D Earth globe…');
       await initCesium();
 
-      // 2. Webcam
       setStatus('Requesting camera access…');
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -638,14 +331,13 @@
           webcamEl.play().catch(rej);
         });
       } catch (err) {
-        const msg = err.name === 'NotAllowedError'
-          ? 'Camera permission denied. Allow access in browser settings and reload.'
-          : `Camera error: ${err.message}`;
-        showError('Camera Required', msg);
+        showError('Camera Required',
+          err.name === 'NotAllowedError'
+            ? 'Camera permission denied. Click the camera icon in your browser address bar, allow access, then reload.'
+            : `Camera error: ${err.message}`);
         return;
       }
 
-      // 3. MediaPipe
       setStatus('Loading hand-tracking model…');
       try {
         const fs = await FilesetResolver.forVisionTasks(
@@ -656,21 +348,19 @@
             modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
             delegate: 'GPU',
           },
-          runningMode: 'VIDEO',
-          numHands: 1,
+          runningMode: 'VIDEO', numHands: 1,
           minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence:  0.5,
-          minTrackingConfidence:      0.5,
+          minHandPresenceConfidence: 0.5,
+          minTrackingConfidence: 0.5,
         });
       } catch (err) {
-        showError('Hand Tracking Error', 'Failed to load hand-tracking model. Please reload.');
+        showError('Hand Tracking Error', 'Failed to load model. Check your connection and reload.');
         return;
       }
 
       loadingEl.style.opacity = '0';
       setTimeout(() => { loadingEl.style.display = 'none'; }, 500);
       setStatus('Show your hand to the camera');
-
       requestAnimationFrame(detectionLoop);
     }
 
