@@ -1,657 +1,93 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Camera Water Particles</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: #0a0a0f;
-    overflow: hidden;
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    touch-action: none;
-    -webkit-user-select: none;
-    user-select: none;
-    width: 100vw;
-    height: 100vh;
-  }
-  #canvas-container {
-    width: 100%;
-    height: 100%;
-    position: fixed;
-    top: 0; left: 0;
-  }
-  canvas { display: block; }
-
-  /* Hidden video element for camera feed */
-  #camera-feed {
-    display: none;
-  }
-
-  /* UI overlay */
-  .ui-controls {
-    position: fixed;
-    top: 16px;
-    right: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    z-index: 100;
-  }
-  .ui-btn {
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.15);
-    background: rgba(10,10,20,0.6);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    color: rgba(255,255,255,0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  .ui-btn:hover, .ui-btn:active {
-    background: rgba(30,30,50,0.8);
-    border-color: rgba(255,255,255,0.3);
-  }
-  .ui-btn svg {
-    width: 20px;
-    height: 20px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  /* Permission denied / error overlay */
-  #error-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(10,10,20,0.95);
-    z-index: 200;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 32px;
-    text-align: center;
-  }
-  #error-overlay.visible {
-    display: flex;
-  }
-  #error-overlay .icon {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    border: 2px solid rgba(255,100,100,0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 24px;
-    color: rgba(255,100,100,0.8);
-    font-size: 28px;
-  }
-  #error-overlay h2 {
-    color: rgba(255,255,255,0.9);
-    font-weight: 500;
-    font-size: 20px;
-    margin-bottom: 12px;
-  }
-  #error-overlay p {
-    color: rgba(255,255,255,0.5);
-    font-size: 14px;
-    line-height: 1.6;
-    max-width: 360px;
-  }
-
-  /* Loading state */
-  #loading-overlay {
-    position: fixed;
-    inset: 0;
-    background: #0a0a0f;
-    z-index: 150;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    transition: opacity 0.6s ease;
-  }
-  #loading-overlay.hidden {
-    opacity: 0;
-    pointer-events: none;
-  }
-  .loader {
-    width: 40px;
-    height: 40px;
-    border: 2px solid rgba(255,255,255,0.1);
-    border-top-color: rgba(120,160,255,0.7);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-bottom: 20px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  #loading-overlay p {
-    color: rgba(255,255,255,0.4);
-    font-size: 13px;
-  }
-
-  /* Info hint */
-  #hint {
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: rgba(255,255,255,0.35);
-    font-size: 12px;
-    z-index: 100;
-    pointer-events: none;
-    transition: opacity 1.5s ease;
-    text-align: center;
-    white-space: nowrap;
-  }
-  #hint.hidden { opacity: 0; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gesture-Controlled 3D Earth</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div id="canvas-container"></div>
+  <!-- API key warning (shown if key is still a placeholder) -->
+  <div id="api-warning"></div>
 
-<video id="camera-feed" playsinline autoplay muted></video>
+  <!-- Fullscreen 3D map -->
+  <div id="map-container">
+    <gmp-map-3d id="map3d"></gmp-map-3d>
+  </div>
 
-<div class="ui-controls">
-  <button class="ui-btn" id="btn-fullscreen" title="Fullscreen">
-    <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
-  </button>
-  <button class="ui-btn" id="btn-reset" title="Reset camera">
-    <svg viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 105.36-9.36L1 10"/></svg>
-  </button>
-</div>
+  <!-- Webcam feed (hidden; fed to MediaPipe) -->
+  <video id="webcam" autoplay muted playsinline></video>
 
-<div id="error-overlay">
-  <div class="icon">!</div>
-  <h2>Camera Access Required</h2>
-  <p id="error-msg">This experience needs camera access to work. Please allow camera permissions and reload the page.<br><br>
-  <strong>Note:</strong> Camera API requires HTTPS or localhost. If testing locally, try hosting on GitHub Pages or Netlify.</p>
-</div>
+  <!-- Hand-tracking preview: webcam thumbnail + skeleton overlay -->
+  <div id="preview-wrapper">
+    <canvas id="preview-canvas"></canvas>
+    <div id="preview-label">Hand Tracking</div>
+  </div>
 
-<div id="loading-overlay">
-  <div class="loader"></div>
-  <p>Accessing camera…</p>
-</div>
+  <!-- Gesture status + control hints (top-left) -->
+  <div id="ui-panel">
+    <div id="gesture-display">
+      <span id="gesture-icon">—</span>
+      <span id="gesture-label">No gesture</span>
+    </div>
+    <div id="controls-hint">
+      <div class="hint-row">
+        <span class="hint-icon">✋</span>
+        <span class="hint-action">Open palm</span>
+        <span class="hint-desc">Pan</span>
+      </div>
+      <div class="hint-row">
+        <span class="hint-icon">🤏</span>
+        <span class="hint-action">Pinch + move up/down</span>
+        <span class="hint-desc">Zoom</span>
+      </div>
+      <div class="hint-row">
+        <span class="hint-icon">✊</span>
+        <span class="hint-action">Closed fist + rotate</span>
+        <span class="hint-desc">Rotate &amp; tilt</span>
+      </div>
+    </div>
+  </div>
 
-<div id="hint">Tap to ripple · Two-finger drag to orbit · Pinch to zoom</div>
+  <!-- Status bar (bottom-left) -->
+  <div id="status-bar">
+    <div id="tracking-dot"></div>
+    <span id="status-text">Initializing…</span>
+  </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-(function() {
-  'use strict';
+  <!-- Error overlay -->
+  <div id="error-overlay" class="hidden">
+    <div class="error-card">
+      <div class="error-icon">⚠</div>
+      <h2 id="error-title">Error</h2>
+      <p id="error-message"></p>
+      <button onclick="location.reload()">Reload Page</button>
+    </div>
+  </div>
 
-  // ─── Config ───
-  const PARTICLE_COLS = 200;
-  const PARTICLE_ROWS = 150;
-  const HEIGHT_SCALE = 3.5;
-  const PARTICLE_SIZE = 2.2;
-  const RIPPLE_SPEED = 6.0;
-  const RIPPLE_DECAY = 0.96;
-  const RIPPLE_STRENGTH = 2.5;
-  const COLOR_SHIFT_SPEED = 0.08;
-  const SAMPLE_INTERVAL = 2; // frames between texture samples
+  <!-- Loading overlay -->
+  <div id="loading-overlay">
+    <div class="loader-ring"></div>
+    <p id="loading-text">Starting…</p>
+  </div>
 
-  // ─── State ───
-  let scene, camera, renderer, particles, clock;
-  let videoEl, videoTexture, videoCanvas, videoCtx;
-  let imageData = null;
-  let frameCount = 0;
-  let cameraDistance = 8;
-  let cameraTheta = 0.3;
-  let cameraPhi = 0.8;
-  let cameraPivot = new THREE.Vector3(0, 0, 0);
-  let targetTheta = 0.3;
-  let targetPhi = 0.8;
-  let targetDistance = 8;
-  let hintTimer = null;
+  <!--
+    ╔══════════════════════════════════════════════════════╗
+    ║  SETUP REQUIRED                                      ║
+    ║  1. Go to console.cloud.google.com                   ║
+    ║  2. Create a project and enable:                     ║
+    ║       • Map Tiles API                                ║
+    ║       • Maps JavaScript API                          ║
+    ║  3. Create an API key                                ║
+    ║  4. Replace YOUR_GOOGLE_MAPS_API_KEY below           ║
+    ╚══════════════════════════════════════════════════════╝
+  -->
+  <script async
+    src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&v=beta&libraries=maps3d">
+  </script>
 
-  // Ripple system
-  const ripples = [];
-  const MAX_RIPPLES = 12;
+  <script type="module" src="app.js"></script>
 
-  // Height data buffers
-  let heightsCurrent, heightsTarget;
-  let brightnessBuf;
-
-  // Touch tracking
-  let touches = {};
-  let lastPinchDist = 0;
-  let isDragging = false;
-  let lastMouse = { x: 0, y: 0 };
-
-  // ─── Init ───
-  async function init() {
-    videoEl = document.getElementById('camera-feed');
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 640 },
-          height: { ideal: 480 }
-        },
-        audio: false
-      });
-      videoEl.srcObject = stream;
-      await videoEl.play();
-    } catch (err) {
-      console.error('Camera error:', err);
-      document.getElementById('loading-overlay').classList.add('hidden');
-      const overlay = document.getElementById('error-overlay');
-      overlay.classList.add('visible');
-      if (err.name === 'NotAllowedError') {
-        document.getElementById('error-msg').innerHTML =
-          'Camera permission was denied. Please allow access in your browser settings and reload.';
-      } else if (err.name === 'NotFoundError') {
-        document.getElementById('error-msg').innerHTML =
-          'No camera found on this device.';
-      }
-      return;
-    }
-
-    // Wait for video dimensions
-    await new Promise(r => {
-      if (videoEl.videoWidth > 0) return r();
-      videoEl.addEventListener('loadeddata', r, { once: true });
-    });
-
-    setupVideoCanvas();
-    setupThreeJS();
-    setupParticles();
-    setupControls();
-
-    document.getElementById('loading-overlay').classList.add('hidden');
-    hintTimer = setTimeout(() => {
-      document.getElementById('hint').classList.add('hidden');
-    }, 5000);
-
-    clock = new THREE.Clock();
-    animate();
-  }
-
-  // ─── Video Canvas ───
-  function setupVideoCanvas() {
-    videoCanvas = document.createElement('canvas');
-    videoCanvas.width = PARTICLE_COLS;
-    videoCanvas.height = PARTICLE_ROWS;
-    videoCtx = videoCanvas.getContext('2d', { willReadFrequently: true });
-
-    heightsCurrent = new Float32Array(PARTICLE_COLS * PARTICLE_ROWS);
-    heightsTarget = new Float32Array(PARTICLE_COLS * PARTICLE_ROWS);
-    brightnessBuf = new Float32Array(PARTICLE_COLS * PARTICLE_ROWS);
-  }
-
-  // ─── Three.js Setup ───
-  function setupThreeJS() {
-    const container = document.getElementById('canvas-container');
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x060610);
-    scene.fog = new THREE.FogExp2(0x060610, 0.06);
-
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-    updateCameraPosition();
-
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    container.appendChild(renderer.domElement);
-
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-  }
-
-  // ─── Particle System ───
-  function setupParticles() {
-    const totalParticles = PARTICLE_COLS * PARTICLE_ROWS;
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(totalParticles * 3);
-    const colors = new Float32Array(totalParticles * 3);
-    const sizes = new Float32Array(totalParticles);
-
-    const spanX = 10;
-    const spanZ = 10 * (PARTICLE_ROWS / PARTICLE_COLS);
-
-    for (let row = 0; row < PARTICLE_ROWS; row++) {
-      for (let col = 0; col < PARTICLE_COLS; col++) {
-        const i = row * PARTICLE_COLS + col;
-        const i3 = i * 3;
-        positions[i3] = (col / (PARTICLE_COLS - 1) - 0.5) * spanX;
-        positions[i3 + 1] = 0;
-        positions[i3 + 2] = (row / (PARTICLE_ROWS - 1) - 0.5) * spanZ;
-        colors[i3] = 0.3;
-        colors[i3 + 1] = 0.4;
-        colors[i3 + 2] = 0.6;
-        sizes[i] = PARTICLE_SIZE;
-      }
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        uPixelRatio: { value: renderer.getPixelRatio() }
-      },
-      vertexShader: `
-        attribute float size;
-        varying vec3 vColor;
-        varying float vY;
-        uniform float uPixelRatio;
-        void main() {
-          vColor = color;
-          vY = position.y;
-          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = size * uPixelRatio * (300.0 / -mvPos.z);
-          gl_PointSize = max(gl_PointSize, 1.0);
-          gl_Position = projectionMatrix * mvPos;
-        }
-      `,
-      fragmentShader: `
-        varying vec3 vColor;
-        varying float vY;
-        void main() {
-          float d = length(gl_PointCoord - 0.5);
-          if (d > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.2, d);
-          // Brighten elevated particles
-          float glow = 1.0 + vY * 0.15;
-          gl_FragColor = vec4(vColor * glow, alpha * 0.9);
-        }
-      `,
-      vertexColors: true,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-
-    particles = new THREE.Points(geometry, material);
-    scene.add(particles);
-  }
-
-  // ─── Camera Orbit ───
-  function updateCameraPosition() {
-    const x = cameraDistance * Math.sin(cameraPhi) * Math.sin(cameraTheta);
-    const y = cameraDistance * Math.cos(cameraPhi);
-    const z = cameraDistance * Math.sin(cameraPhi) * Math.cos(cameraTheta);
-    camera.position.set(
-      cameraPivot.x + x,
-      cameraPivot.y + y,
-      cameraPivot.z + z
-    );
-    camera.lookAt(cameraPivot);
-  }
-
-  function resetCamera() {
-    targetTheta = 0.3;
-    targetPhi = 0.8;
-    targetDistance = 8;
-  }
-
-  // ─── Ripple ───
-  function addRipple(normX, normZ) {
-    if (ripples.length >= MAX_RIPPLES) ripples.shift();
-    ripples.push({
-      cx: (normX - 0.5) * PARTICLE_COLS,
-      cz: (normZ - 0.5) * PARTICLE_ROWS,
-      radius: 0,
-      strength: RIPPLE_STRENGTH,
-      alive: true
-    });
-  }
-
-  function screenToPlane(sx, sy) {
-    const ndc = new THREE.Vector2(
-      (sx / window.innerWidth) * 2 - 1,
-      -(sy / window.innerHeight) * 2 + 1
-    );
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(ndc, camera);
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    const hit = new THREE.Vector3();
-    raycaster.ray.intersectPlane(plane, hit);
-    if (!hit) return null;
-
-    const spanX = 10;
-    const spanZ = 10 * (PARTICLE_ROWS / PARTICLE_COLS);
-    const normX = hit.x / spanX + 0.5;
-    const normZ = hit.z / spanZ + 0.5;
-    if (normX < 0 || normX > 1 || normZ < 0 || normZ > 1) return null;
-    return { x: normX, z: normZ };
-  }
-
-  // ─── Controls ───
-  function setupControls() {
-    const el = renderer.domElement;
-
-    // ── Touch ──
-    el.addEventListener('touchstart', e => {
-      e.preventDefault();
-      for (const t of e.changedTouches) {
-        touches[t.identifier] = { x: t.clientX, y: t.clientY };
-      }
-      const keys = Object.keys(touches);
-      if (keys.length === 1) {
-        // Single tap = ripple
-        const pt = screenToPlane(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-        if (pt) addRipple(pt.x, pt.z);
-      }
-      if (keys.length === 2) {
-        const t0 = touches[keys[0]], t1 = touches[keys[1]];
-        lastPinchDist = Math.hypot(t1.x - t0.x, t1.y - t0.y);
-      }
-    }, { passive: false });
-
-    el.addEventListener('touchmove', e => {
-      e.preventDefault();
-      for (const t of e.changedTouches) {
-        if (!touches[t.identifier]) continue;
-        const prev = touches[t.identifier];
-        touches[t.identifier] = { x: t.clientX, y: t.clientY };
-      }
-      const keys = Object.keys(touches);
-      if (keys.length === 2) {
-        const t0 = touches[keys[0]], t1 = touches[keys[1]];
-        const dist = Math.hypot(t1.x - t0.x, t1.y - t0.y);
-        // Pinch zoom
-        if (lastPinchDist > 0) {
-          const scale = lastPinchDist / dist;
-          targetDistance = Math.max(3, Math.min(20, targetDistance * scale));
-        }
-        lastPinchDist = dist;
-
-        // Two-finger orbit (use midpoint delta)
-        const midX = (t0.x + t1.x) / 2;
-        const midY = (t0.y + t1.y) / 2;
-        // We just track orbit via the overall drag
-        const prevT0 = { x: t0.x, y: t0.y };
-        // Approximate: use changedTouches delta
-        if (e.changedTouches.length > 0) {
-          const ct = e.changedTouches[0];
-          const prev2 = touches[ct.identifier] || { x: ct.clientX, y: ct.clientY };
-          // Already updated, so compute from stored
-        }
-        // Simplified two-finger orbit
-        targetTheta += (e.changedTouches[0].clientX - (touches[e.changedTouches[0].identifier]?.x || e.changedTouches[0].clientX)) * 0.0001;
-      }
-      if (keys.length === 1 && e.changedTouches.length === 1) {
-        // Single finger move = continuous ripple
-        const pt = screenToPlane(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-        if (pt && frameCount % 3 === 0) addRipple(pt.x, pt.z);
-      }
-    }, { passive: false });
-
-    el.addEventListener('touchend', e => {
-      for (const t of e.changedTouches) {
-        delete touches[t.identifier];
-      }
-      lastPinchDist = 0;
-    });
-
-    // ── Mouse ──
-    el.addEventListener('mousedown', e => {
-      if (e.button === 2) {
-        isDragging = true;
-        lastMouse = { x: e.clientX, y: e.clientY };
-      } else if (e.button === 0) {
-        const pt = screenToPlane(e.clientX, e.clientY);
-        if (pt) addRipple(pt.x, pt.z);
-      }
-    });
-
-    el.addEventListener('mousemove', e => {
-      if (isDragging) {
-        const dx = e.clientX - lastMouse.x;
-        const dy = e.clientY - lastMouse.y;
-        targetTheta -= dx * 0.005;
-        targetPhi = Math.max(0.2, Math.min(Math.PI * 0.45, targetPhi - dy * 0.005));
-        lastMouse = { x: e.clientX, y: e.clientY };
-      }
-      if (e.buttons === 1) {
-        const pt = screenToPlane(e.clientX, e.clientY);
-        if (pt && frameCount % 3 === 0) addRipple(pt.x, pt.z);
-      }
-    });
-
-    el.addEventListener('mouseup', () => { isDragging = false; });
-    el.addEventListener('contextmenu', e => e.preventDefault());
-
-    el.addEventListener('wheel', e => {
-      e.preventDefault();
-      targetDistance = Math.max(3, Math.min(20, targetDistance + e.deltaY * 0.005));
-    }, { passive: false });
-
-    // ── Buttons ──
-    document.getElementById('btn-fullscreen').addEventListener('click', () => {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen?.() ||
-        document.documentElement.webkitRequestFullscreen?.();
-      } else {
-        document.exitFullscreen?.() || document.webkitExitFullscreen?.();
-      }
-    });
-
-    document.getElementById('btn-reset').addEventListener('click', resetCamera);
-  }
-
-  // ─── Sample Video ───
-  function sampleVideo() {
-    if (videoEl.readyState < 2) return;
-    videoCtx.drawImage(videoEl, 0, 0, PARTICLE_COLS, PARTICLE_ROWS);
-    imageData = videoCtx.getImageData(0, 0, PARTICLE_COLS, PARTICLE_ROWS);
-  }
-
-  // ─── Animate ───
-  function animate() {
-    requestAnimationFrame(animate);
-    const dt = Math.min(clock.getDelta(), 0.05);
-    const elapsed = clock.getElapsedTime();
-    frameCount++;
-
-    // Sample camera on interval
-    if (frameCount % SAMPLE_INTERVAL === 0) {
-      sampleVideo();
-    }
-
-    // Smooth camera
-    cameraTheta += (targetTheta - cameraTheta) * 0.08;
-    cameraPhi += (targetPhi - cameraPhi) * 0.08;
-    cameraDistance += (targetDistance - cameraDistance) * 0.08;
-    updateCameraPosition();
-
-    // Update ripples
-    for (let r = ripples.length - 1; r >= 0; r--) {
-      const rip = ripples[r];
-      rip.radius += RIPPLE_SPEED * dt * 30;
-      rip.strength *= RIPPLE_DECAY;
-      if (rip.strength < 0.01) {
-        ripples.splice(r, 1);
-      }
-    }
-
-    // Update particles
-    if (!imageData) {
-      renderer.render(scene, camera);
-      return;
-    }
-
-    const positions = particles.geometry.attributes.position.array;
-    const colors = particles.geometry.attributes.color.array;
-    const pixels = imageData.data;
-    const total = PARTICLE_COLS * PARTICLE_ROWS;
-
-    // Color shift hue offset
-    const hueShift = elapsed * COLOR_SHIFT_SPEED;
-
-    for (let i = 0; i < total; i++) {
-      const pi = i * 4;
-      const r = pixels[pi] / 255;
-      const g = pixels[pi + 1] / 255;
-      const b = pixels[pi + 2] / 255;
-
-      // Brightness → target height
-      const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
-      heightsTarget[i] = brightness * HEIGHT_SCALE;
-
-      // Smooth height lerp
-      heightsCurrent[i] += (heightsTarget[i] - heightsCurrent[i]) * 0.12;
-
-      // Add ripple displacement
-      let rippleOffset = 0;
-      const col = i % PARTICLE_COLS;
-      const row = Math.floor(i / PARTICLE_COLS);
-      for (let ri = 0; ri < ripples.length; ri++) {
-        const rip = ripples[ri];
-        const dx = col - rip.cx - PARTICLE_COLS * 0.5;
-        const dz = row - rip.cz - PARTICLE_ROWS * 0.5;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        const ringDist = Math.abs(dist - rip.radius);
-        if (ringDist < 8) {
-          const wave = Math.cos(ringDist * 0.8) * Math.exp(-ringDist * 0.2);
-          rippleOffset += wave * rip.strength;
-        }
-      }
-
-      // Set Y position
-      positions[i * 3 + 1] = heightsCurrent[i] + rippleOffset;
-
-      // Color: blend camera color with hue shift
-      const shift = Math.sin(hueShift + i * 0.0001) * 0.15;
-      const shift2 = Math.cos(hueShift * 0.7 + i * 0.00015) * 0.1;
-      colors[i * 3] = Math.min(1, r * 0.7 + 0.3 * (r + shift + 0.1));
-      colors[i * 3 + 1] = Math.min(1, g * 0.7 + 0.3 * (g + shift2 + 0.05));
-      colors[i * 3 + 2] = Math.min(1, b * 0.7 + 0.3 * (b - shift * 0.5 + 0.15));
-
-      // Boost colors for elevated particles
-      const elev = heightsCurrent[i] / HEIGHT_SCALE;
-      colors[i * 3] = Math.min(1, colors[i * 3] + elev * 0.1);
-      colors[i * 3 + 1] = Math.min(1, colors[i * 3 + 1] + elev * 0.08);
-      colors[i * 3 + 2] = Math.min(1, colors[i * 3 + 2] + elev * 0.15);
-    }
-
-    particles.geometry.attributes.position.needsUpdate = true;
-    particles.geometry.attributes.color.needsUpdate = true;
-
-    renderer.render(scene, camera);
-  }
-
-  // ─── Boot ───
-  init();
-})();
-</script>
 </body>
 </html>
